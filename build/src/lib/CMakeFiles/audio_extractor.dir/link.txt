@@ -1,2 +1,0 @@
-/usr/bin/ar qc libaudio_extractor.a CMakeFiles/audio_extractor.dir/audio_extractor.cpp.o
-/usr/bin/ranlib libaudio_extractor.a
