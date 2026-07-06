@@ -1,0 +1,9 @@
+/home/jay/code/JVidNote/build/CMakeFiles/edit_cache.dir
+/home/jay/code/JVidNote/build/CMakeFiles/rebuild_cache.dir
+/home/jay/code/JVidNote/build/src/CMakeFiles/jvidnote_cli.dir
+/home/jay/code/JVidNote/build/src/CMakeFiles/edit_cache.dir
+/home/jay/code/JVidNote/build/src/CMakeFiles/rebuild_cache.dir
+/home/jay/code/JVidNote/build/src/lib/CMakeFiles/audio_extractor.dir
+/home/jay/code/JVidNote/build/src/lib/CMakeFiles/audio_extractor_shared.dir
+/home/jay/code/JVidNote/build/src/lib/CMakeFiles/edit_cache.dir
+/home/jay/code/JVidNote/build/src/lib/CMakeFiles/rebuild_cache.dir

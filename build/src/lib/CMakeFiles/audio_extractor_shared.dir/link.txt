@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libaudio_extractor_shared.so -o libaudio_extractor_shared.so CMakeFiles/audio_extractor_shared.dir/audio_extractor.cpp.o  -lavformat -lavcodec -lavutil -lavfilter -lswresample 

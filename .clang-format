@@ -1,0 +1,49 @@
+---
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++17
+
+# 缩进
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+IndentCaseLabels: false
+IndentPPDirectives: BeforeHash
+
+# 大括号
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# 列宽
+ColumnLimit: 80
+
+# 指针/引用对齐
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# 空格
+SpaceAfterCStyleCast: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+
+# 换行
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackArguments: true
+BinPackParameters: true
+
+# include 排序
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+
+# 其他
+AccessModifierOffset: -2
+ConstructorInitializerIndentWidth: 2
+FixNamespaceComments: true

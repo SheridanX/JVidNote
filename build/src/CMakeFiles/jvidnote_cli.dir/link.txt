@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/jvidnote_cli.dir/main.cpp.o -o jvidnote_cli  lib/libaudio_extractor.a -lavformat -lavcodec -lavutil -lavfilter -lswresample 
