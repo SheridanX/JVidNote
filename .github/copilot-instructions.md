@@ -55,8 +55,16 @@ class ClassName { ... };
 ### 错误处理
 
 - 函数返回 `bool` 表示成功/失败
-- 错误信息输出到 `stderr`，正常信息输出到 `stdout`
 - 不抛异常
+
+### 日志输出
+
+- 统一使用 `src/lib/log.h` 中的 `Log` 类，禁止裸 `std::fprintf(stderr, ...)`
+- `Log().error(fmt, ...)`  — 错误信息，红色输出到 stderr，自动带文件名/行号
+- `Log().warn(fmt, ...)`   — 警告信息，黄色输出到 stdout，自动带文件名/行号
+- `Log().info(fmt, ...)`   — 一般信息，绿色输出到 stdout，自动带文件名/行号
+- `Log().print(fmt, ...)`  — 正常打印，加粗输出到 stdout，不带额外前缀
+- `Log` 构造时自动捕获 `std::source_location`，无需手动传文件/行号
 
 ## 项目结构
 

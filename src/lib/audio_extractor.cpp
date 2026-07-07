@@ -10,6 +10,8 @@ extern "C" {
 #include "audio_extractor.h"
 #include "log.h"
 
+#include <cstring>
+
 namespace JVNote
 {
 
@@ -223,11 +225,20 @@ bool AudioExtractor::setup_output_stream()
     // 2. 优先尝试 stream copy（无损、快速，不经过解码→编码）
     avcodec_parameters_copy(m_p_out_stream->codecpar,
                             m_p_in_audio_stream->codecpar);
+    m_p_out_stream->codecpar->codec_tag = 0;
     m_p_out_stream->time_base = m_p_in_audio_stream->time_base;
+
+    // WAV 容器只支持 PCM 编码，其他格式必须重编码
+    bool is_wav = m_up_out_fmt_ctx->oformat->name &&
+                  std::strcmp(m_up_out_fmt_ctx->oformat->name, "wav") == 0;
+    bool is_pcm = m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE
+               || m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_S16BE
+               || m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_U8;
 
     if (avformat_query_codec(m_up_out_fmt_ctx->oformat,
                              m_p_in_audio_stream->codecpar->codec_id,
-                             FF_COMPLIANCE_NORMAL) == 1) {
+                             FF_COMPLIANCE_NORMAL) == 1
+        && !(is_wav && !is_pcm)) {
       ret = true;  // stream copy 模式，无需 encoder
       break;
     }

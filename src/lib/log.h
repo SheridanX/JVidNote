@@ -50,7 +50,13 @@ void vfprint(FILE* stream, const char* fmt, Args&&... args)
 // ============================================================
 struct Log
 {
-  std::source_location loc = std::source_location::current();
+  std::source_location loc;
+
+  // 显式构造函数确保 source_location::current() 在调用点求值
+  Log(std::source_location loc = std::source_location::current())
+      : loc(loc)
+  {
+  }
 
   // ---- print  — 正常打印，加粗输出 ----
   template <typename... Args>
