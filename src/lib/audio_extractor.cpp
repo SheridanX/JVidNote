@@ -10,7 +10,8 @@ extern "C" {
 #include "audio_extractor.h"
 #include "log.h"
 
-using namespace JVNote;
+namespace JVNote
+{
 
 // ============================================================
 // 自定义删除器实现
@@ -494,3 +495,5 @@ void AudioExtractor::write_trailer()
         av_write_trailer(m_up_out_fmt_ctx.get());
     }
 }
+
+} // namespace JVNote

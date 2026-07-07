@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <cstring>
 
+using namespace JVNote;
+
 static void print_usage(const char* prog_name)
 {
     std::printf("Usage: %s <input.mp4> [output_audio.ext]\n", prog_name);

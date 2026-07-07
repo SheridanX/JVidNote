@@ -10,6 +10,9 @@ struct AVStream;
 struct SwrContext;
 struct AVAudioFifo;
 
+namespace JVNote
+{
+
 // ---- 自定义删除器（实现在 .cpp 中） ----
 struct AVFormatInputDeleter  { void operator()(AVFormatContext* p) const; };
 struct AVFormatOutputDeleter { void operator()(AVFormatContext* p) const; };
@@ -114,3 +117,5 @@ inline bool extract_audio(const std::string& input_file,
         && ex.open_output(output_file)
         && ex.extract();
 }
+
+} // namespace JVNote
