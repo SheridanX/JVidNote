@@ -43,6 +43,7 @@ struct SpeechRecognizer::Impl
   using OfflineRec = sherpa_onnx::cxx::OfflineRecognizer;
 
   std::unique_ptr<OfflineRec> up_recognizer;
+  int32_t chunk_duration_sec = 30;
 };
 
 // ============================================================
@@ -67,6 +68,8 @@ bool SpeechRecognizer::init(const SpeechRecognizerConfig& cfg)
     if (!m_up_impl) {
       m_up_impl = std::make_unique<Impl>();
     }
+
+    m_up_impl->chunk_duration_sec = cfg.chunk_duration_sec;
 
     // 预检：模型和词表文件必须存在且非空
     if (!check_file(cfg.model_path, "Model")) break;
@@ -105,10 +108,20 @@ bool SpeechRecognizer::init(const SpeechRecognizerConfig& cfg)
 }
 
 // ============================================================
-// transcribe_file
+// transcribe_file (无回调版本，委托给回调版本)
 // ============================================================
 
 std::string SpeechRecognizer::transcribe_file(const std::string& wav_path)
+{
+  return transcribe_file(wav_path, nullptr);
+}
+
+// ============================================================
+// transcribe_file (回调版本)
+// ============================================================
+
+std::string SpeechRecognizer::transcribe_file(const std::string& wav_path,
+                                               ChunkCallback on_chunk)
 {
   std::string result;
   do {
@@ -123,19 +136,68 @@ std::string SpeechRecognizer::transcribe_file(const std::string& wav_path)
       break;
     }
 
-    auto stream = m_up_impl->up_recognizer->CreateStream();
-    if (!stream.Get()) {
-      Log().error("Failed to create stream.");
-      break;
+    int32_t chunk_sec = m_up_impl->chunk_duration_sec;
+    int64_t total_samples = static_cast<int64_t>(wave.samples.size());
+    int64_t chunk_samples = chunk_sec > 0
+      ? static_cast<int64_t>(chunk_sec) * wave.sample_rate
+      : total_samples;
+
+    if (chunk_samples >= total_samples) {
+      // 音频较短，一次性处理
+      auto stream = m_up_impl->up_recognizer->CreateStream();
+      if (!stream.Get()) {
+        Log().error("Failed to create stream.");
+        break;
+      }
+      stream.AcceptWaveform(wave.sample_rate, wave.samples.data(),
+                            static_cast<int32_t>(wave.samples.size()));
+      m_up_impl->up_recognizer->Decode(&stream);
+      auto rec_result = m_up_impl->up_recognizer->GetResult(&stream);
+      result = std::move(rec_result.text);
+
+      if (on_chunk) on_chunk(0, 1, result);
+    } else {
+      // 长音频，分片处理
+      int total_chunks = static_cast<int>(
+        (total_samples + chunk_samples - 1) / chunk_samples);
+      Log().print("Audio duration ~%llds, splitting into %d chunks.",
+                  (long long)(total_samples / wave.sample_rate),
+                  total_chunks);
+
+      for (int i = 0; i < total_chunks; ++i) {
+        int64_t start = static_cast<int64_t>(i) * chunk_samples;
+        int64_t count = chunk_samples;
+        if (start + count > total_samples) {
+          count = total_samples - start;
+        }
+
+        auto stream = m_up_impl->up_recognizer->CreateStream();
+        if (!stream.Get()) {
+          Log().error("Failed to create stream for chunk %d.", i);
+          break;
+        }
+
+        stream.AcceptWaveform(
+          wave.sample_rate,
+          wave.samples.data() + start,
+          static_cast<int32_t>(count));
+
+        m_up_impl->up_recognizer->Decode(&stream);
+        auto rec_result = m_up_impl->up_recognizer->GetResult(&stream);
+
+        if (!rec_result.text.empty()) {
+          if (!result.empty()) result += " ";
+          result += rec_result.text;
+        }
+
+        if (on_chunk) {
+          on_chunk(i, total_chunks,
+                   rec_result.text.empty() ? "" : rec_result.text);
+        }
+      }
+
+      Log().print("Chunked transcription done.");
     }
-
-    stream.AcceptWaveform(wave.sample_rate, wave.samples.data(),
-                          static_cast<int32_t>(wave.samples.size()));
-
-    m_up_impl->up_recognizer->Decode(&stream);
-
-    auto rec_result = m_up_impl->up_recognizer->GetResult(&stream);
-    result = std::move(rec_result.text);
   } while (false);
   return result;
 }

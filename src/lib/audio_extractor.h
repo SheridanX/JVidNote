@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -73,6 +74,12 @@ public:
     bool extract();
 
     /**
+     * @brief 查询提取进度（线程安全，可在其他线程调用）
+     * @return 0-100 的百分比，未开始或未初始化返回 0
+     */
+    int get_progress() const { return m_progress.load(); }
+
+    /**
      * @brief 关闭所有资源，允许复用提取器处理新文件
      */
     void close();
@@ -104,7 +111,11 @@ private:
     int       m_audio_stream_index  = -1;
 
     // 累积已写入编码器的采样数，用于生成正确的 PTS
-    int64_t   m_samples_written     = 0;
+    int64_t             m_samples_written    = 0;
+
+    // 进度跟踪（原子变量，线程安全）
+    std::atomic<int>    m_progress{0};
+    int64_t             m_total_duration{0};
 };
 
 /**

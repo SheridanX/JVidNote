@@ -1,10 +1,20 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 
 namespace JVNote
 {
+
+/**
+ * @brief 分片转写回调。
+ * @param chunk_index  当前片段索引（从 0 开始）
+ * @param total_chunks 总片段数
+ * @param text         当前片段识别出的文字
+ */
+using ChunkCallback = std::function<void(
+  int chunk_index, int total_chunks, const std::string& text)>;
 
 /**
  * @brief 语音识别器配置。
@@ -25,6 +35,11 @@ struct SpeechRecognizerConfig
   bool use_itn = true;
   /** 模型类型，"sense_voice" 或 "whisper" 等。 */
   std::string model_type = "sense_voice";
+  /**
+   * @brief 分段时长（秒）。音频超过此长度时自动分片转写，避免 OOM。
+   *        设为 0 表示不分片，一次性处理。
+   */
+  int32_t chunk_duration_sec = 30;
 };
 
 /**
@@ -65,6 +80,19 @@ public:
    * @return 识别出的文字，失败返回空字符串。
    */
   std::string transcribe_file(const std::string& wav_path);
+
+  /**
+   * @brief 转写单个 WAV 音频文件（流式回调版本）。
+   *
+   * 当音频需要分段处理时，每完成一个片段就调用一次 @p on_chunk，
+   * 方便实时显示进度和中间结果。短音频一次性处理时也会调用一次。
+   *
+   * @param wav_path  WAV 文件路径。
+   * @param on_chunk  每完成一个片段的回调。
+   * @return 完整拼接后的识别文字，失败返回空字符串。
+   */
+  std::string transcribe_file(const std::string& wav_path,
+                               ChunkCallback on_chunk);
 
   /**
    * @brief 关闭识别器，释放模型资源。

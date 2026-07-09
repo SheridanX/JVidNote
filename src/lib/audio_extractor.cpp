@@ -10,6 +10,7 @@ extern "C" {
 #include "audio_extractor.h"
 #include "log.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace JVNote
@@ -64,7 +65,9 @@ void AudioExtractor::close()
     m_p_in_audio_stream    = nullptr;
     m_p_out_stream        = nullptr;
     m_audio_stream_index = -1;
-    m_samples_written     = 0;
+    m_samples_written    = 0;
+    m_progress.store(0);
+    m_total_duration     = 0;
 }
 
 // ============================================================
@@ -139,6 +142,10 @@ bool AudioExtractor::extract()
       break;
     }
 
+    // 计算总时长（AV_TIME_BASE 单位，即微秒）
+    m_total_duration = m_up_in_fmt_ctx->duration;
+    m_progress.store(0);
+
     AVPacket* pkt   = av_packet_alloc();
     AVFrame*  frame = av_frame_alloc();
 
@@ -147,6 +154,16 @@ bool AudioExtractor::extract()
         av_packet_unref(pkt);
         continue;
       }
+
+      // 更新进度（%）
+      if (m_total_duration > 0 && pkt->pts != AV_NOPTS_VALUE) {
+        int64_t current_time = av_rescale_q(
+          pkt->pts, m_p_in_audio_stream->time_base, AV_TIME_BASE_Q);
+        int pct = static_cast<int>(
+          std::min(current_time * 100 / m_total_duration, int64_t{99}));
+        m_progress.store(pct);
+      }
+
       if (m_up_enc_ctx) process_encoded_packet(pkt);
       else              process_stream_copy_packet(pkt);
       av_packet_unref(pkt);
@@ -157,6 +174,8 @@ bool AudioExtractor::extract()
 
     flush_encoder();
     write_trailer();
+
+    m_progress.store(100);
     ret = true;
   } while (false);
   return ret;

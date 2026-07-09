@@ -3,9 +3,13 @@
 #include "lib/log.h"
 #include "lib/speech_recognizer.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <thread>
 
 using namespace JVNote;
 
@@ -53,7 +57,15 @@ static int do_transcribe(const char* wav_path,
       break;
     }
 
-    text = sr.transcribe_file(wav_path);
+    text = sr.transcribe_file(
+      wav_path,
+      [](int chunk_idx, int total, const std::string& chunk_text) {
+        if (total > 1) {
+          std::fprintf(stderr, "\r[chunk %d/%d] %s\n",
+                       chunk_idx + 1, total, chunk_text.c_str());
+        }
+      });
+
     if (text.empty()) {
       Log().error("Transcription returned empty result.");
       exit_code = 4;
@@ -106,6 +118,84 @@ static int do_transcribe_video(const char* video_path,
     }
 
     exit_code = do_transcribe(wav_path.c_str(), model_path, tokens_path);
+  } while (false);
+  return exit_code;
+}
+
+/**
+ * @brief 在终端打印进度条（由子线程调用）。
+ * @param extractor 音频提取器引用
+ * @param done      主线程完成后将其设为 true 以终止循环
+ */
+static void show_progress_bar(const AudioExtractor& extractor,
+                               const std::atomic<bool>& done)
+{
+  constexpr int bar_width = 40;
+  int last_pct = -1;
+
+  while (!done.load()) {
+    int pct = extractor.get_progress();
+    if (pct == last_pct) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      continue;
+    }
+    last_pct = pct;
+
+    int filled = pct * bar_width / 100;
+    std::fprintf(stderr, "\r[");
+    for (int i = 0; i < bar_width; ++i) {
+      std::fputc(i < filled ? '=' : (i == filled ? '>' : ' '), stderr);
+    }
+    std::fprintf(stderr, "] %3d%%", pct);
+    std::fflush(stderr);
+  }
+
+  // 最终 100% 刷新
+  int filled = bar_width;
+  std::fprintf(stderr, "\r[");
+  for (int i = 0; i < bar_width; ++i) {
+    std::fputc('=', stderr);
+  }
+  std::fprintf(stderr, "] 100%%\n");
+  std::fflush(stderr);
+}
+
+/**
+ * @brief 从视频提取音频，同时在独立线程显示进度条。
+ */
+static int do_extract_with_progress(const std::string& input_file,
+                                     const std::string& output_file)
+{
+  int exit_code = 0;
+  do {
+    AudioExtractor ex;
+    if (!ex.open_input(input_file)) {
+      Log().error("Failed to open input.");
+      exit_code = 2;
+      break;
+    }
+    if (!ex.open_output(output_file)) {
+      Log().error("Failed to open output.");
+      exit_code = 2;
+      break;
+    }
+
+    std::atomic<bool> done{false};
+    std::thread progress_thread(
+      [&]() { show_progress_bar(ex, done); });
+
+    bool ok = ex.extract();
+
+    done.store(true);
+    progress_thread.join();
+
+    if (!ok) {
+      Log().error("Failed to extract audio.");
+      exit_code = 2;
+      break;
+    }
+
+    Log().print("Audio extracted to: %s", output_file.c_str());
   } while (false);
   return exit_code;
 }
@@ -175,7 +265,7 @@ int main(int argc, char* argv[])
       }
     }
 
-    if (!extract_audio(input_file, output_file)) {
+    if (do_extract_with_progress(input_file, output_file) != 0) {
       Log().error("Failed to extract audio.");
       exit_code = 2;
       break;
