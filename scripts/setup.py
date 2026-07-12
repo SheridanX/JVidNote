@@ -45,23 +45,33 @@ def get_project_root() -> Path:
 def download(url: str, dest: Path) -> None:
     """下载文件，带进度条"""
     print(f"  下载: {url}")
-    print(f"  保存: {dest.name}")
 
-    def _progress(count, block_size, total_size):
-        downloaded = count * block_size
-        if total_size > 0:
-            pct = min(downloaded * 100 // total_size, 100)
-            bar_len = 30
-            filled = pct * bar_len // 100
-            bar = "█" * filled + "░" * (bar_len - filled)
-            sys.stdout.write(f"\r  [{bar}] {pct:3d}% "
-                             f"({downloaded / 1024 / 1024:.0f} MB)")
-        else:
-            # 未知总大小，只显示已下载量
-            sys.stdout.write(f"\r  已下载: {downloaded / 1024 / 1024:.0f} MB")
-        sys.stdout.flush()
-
-    urllib.request.urlretrieve(url, str(dest), _progress)
+    req = urllib.request.Request(url, headers={"User-Agent": "JVidNote/setup"})
+    with urllib.request.urlopen(req) as resp:
+        total = int(resp.headers.get("Content-Length", 0))
+        downloaded = 0
+        block_size = 8192
+        with open(dest, "wb") as f:
+            while True:
+                chunk = resp.read(block_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = min(downloaded * 100 // total, 100)
+                    bar_len = 30
+                    filled = pct * bar_len // 100
+                    bar = "█" * filled + "░" * (bar_len - filled)
+                    sys.stdout.write(
+                        f"\r  [{bar}] {pct:3d}% "
+                        f"({downloaded / 1024**2:.0f}/{total / 1024**2:.0f} MB)"
+                    )
+                else:
+                    sys.stdout.write(
+                        f"\r  已下载: {downloaded / 1024**2:.0f} MB"
+                    )
+                sys.stdout.flush()
     print()
 
 
