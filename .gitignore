@@ -1,2 +1,20 @@
-build
-stream_example
+# 编译产物
+build/
+
+# 示例文件
+stream_example/
+
+# 下载的动态库 (由 scripts/setup.py 下载)
+lib/*.so
+lib/*.so.*
+lib/*.dll
+
+# 下载的模型 (由 scripts/setup.py 下载)
+model/
+
+# 下载临时文件
+.download_tmp/
+
+# 第三方库本地缓存 (可选的本地加速)
+third_party_lib/*.tar.bz2
+third_party_lib/*.tgz
