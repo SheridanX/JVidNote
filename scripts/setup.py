@@ -48,13 +48,18 @@ def download(url: str, dest: Path) -> None:
     print(f"  保存: {dest.name}")
 
     def _progress(count, block_size, total_size):
+        downloaded = count * block_size
         if total_size > 0:
-            pct = min(count * block_size * 100 // total_size, 100)
+            pct = min(downloaded * 100 // total_size, 100)
             bar_len = 30
             filled = pct * bar_len // 100
             bar = "█" * filled + "░" * (bar_len - filled)
-            sys.stdout.write(f"\r  [{bar}] {pct:3d}%")
-            sys.stdout.flush()
+            sys.stdout.write(f"\r  [{bar}] {pct:3d}% "
+                             f"({downloaded / 1024 / 1024:.0f} MB)")
+        else:
+            # 未知总大小，只显示已下载量
+            sys.stdout.write(f"\r  已下载: {downloaded / 1024 / 1024:.0f} MB")
+        sys.stdout.flush()
 
     urllib.request.urlretrieve(url, str(dest), _progress)
     print()
