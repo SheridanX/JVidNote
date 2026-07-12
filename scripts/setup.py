@@ -47,31 +47,37 @@ def download(url: str, dest: Path) -> None:
     print(f"  下载: {url}")
 
     req = urllib.request.Request(url, headers={"User-Agent": "JVidNote/setup"})
-    with urllib.request.urlopen(req) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        downloaded = 0
-        block_size = 8192
-        with open(dest, "wb") as f:
-            while True:
-                chunk = resp.read(block_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = min(downloaded * 100 // total, 100)
-                    bar_len = 30
-                    filled = pct * bar_len // 100
-                    bar = "█" * filled + "░" * (bar_len - filled)
-                    sys.stdout.write(
-                        f"\r  [{bar}] {pct:3d}% "
-                        f"({downloaded / 1024**2:.0f}/{total / 1024**2:.0f} MB)"
-                    )
-                else:
-                    sys.stdout.write(
-                        f"\r  已下载: {downloaded / 1024**2:.0f} MB"
-                    )
-                sys.stdout.flush()
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"\n  ❌ 下载失败: {e}")
+        print(f"  提示: 如果 GitHub 不可达，请将 .tar.bz2 放入 third_party_lib/")
+        sys.exit(1)
+
+    total = int(resp.headers.get("Content-Length", 0))
+    downloaded = 0
+    block_size = 8192
+    with open(dest, "wb") as f:
+        while True:
+            chunk = resp.read(block_size)
+            if not chunk:
+                break
+            f.write(chunk)
+            downloaded += len(chunk)
+            if total > 0:
+                pct = min(downloaded * 100 // total, 100)
+                bar_len = 30
+                filled = pct * bar_len // 100
+                bar = "█" * filled + "░" * (bar_len - filled)
+                sys.stdout.write(
+                    f"\r  [{bar}] {pct:3d}% "
+                    f"({downloaded / 1024**2:.0f}/{total / 1024**2:.0f} MB)"
+                )
+            else:
+                sys.stdout.write(
+                    f"\r  已下载: {downloaded / 1024**2:.0f} MB"
+                )
+            sys.stdout.flush()
     print()
 
 
