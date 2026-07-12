@@ -223,11 +223,12 @@ def main():
         print("编译:")
         print("  cd build && cmake .. && cmake --build .")
         print()
-        print("运行 (GPU):")
+        print("运行:")
+        provider = "--provider cuda" if use_gpu else ""
         model_arg = f"model/{MODEL_NAME}"
         print(f"  ./build/src/jvidnote_cli transcribe <audio.wav> \\")
         print(f"       {model_arg}/model.int8.onnx \\")
-        print(f"       {model_arg}/tokens.txt --provider cuda")
+        print(f"       {model_arg}/tokens.txt {provider}")
         print("=" * 60)
     else:
         print()
