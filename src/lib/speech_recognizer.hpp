@@ -39,9 +39,10 @@ struct SpeechRecognizerConfig
   std::string provider = "cpu";
   /**
    * @brief 分段时长（秒）。音频超过此长度时自动分片转写，避免 OOM。
+   *        GTX 1660 (6GB) 建议 60-120s，更大的 chunk 减少开销。
    *        设为 0 表示不分片，一次性处理。
    */
-  int32_t chunk_duration_sec = 30;
+  int32_t chunk_duration_sec = 80;
 };
 
 /**

@@ -63,9 +63,14 @@ public:
 
     /**
      * @brief 创建输出文件及编码器
+     * @param output_file  输出文件路径。
+     * @param target_rate  目标采样率（默认 16000）。
+     * @param target_ch    目标声道数（默认 1，单声道）。
      * @return 成功返回 true
      */
-    bool open_output(const std::string& output_file);
+    bool open_output(const std::string& output_file,
+                     int target_rate = 16000,
+                     int target_ch = 1);
 
     /**
      * @brief 执行提取（必须先调用 openInput 和 openOutput）
@@ -88,8 +93,8 @@ private:
     // ---- 内部步骤 ----
     bool find_audio_stream();
     bool setup_decoder();
-    bool setup_output_stream();
-    bool setup_resampler();
+    bool setup_output_stream(int target_rate, int target_ch);
+    bool setup_resampler(int target_rate, int target_ch);
     bool write_output_header();
 
     void process_encoded_packet(struct AVPacket* pkt);
@@ -119,7 +124,7 @@ private:
 };
 
 /**
- * @brief 便捷函数：一步完成音频提取
+ * @brief 便捷函数：一步完成音频提取（默认 16kHz 单声道 WAV）。
  */
 inline bool extract_audio(const std::string& input_file,
                            const std::string& output_file) {

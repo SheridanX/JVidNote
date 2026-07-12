@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <thread>
 
@@ -17,32 +18,71 @@ static void print_usage(const char* prog_name)
 {
     std::printf("Usage:\n");
     std::printf("  %s <input.mp4> [output_audio.ext]\n", prog_name);
-  std::printf("  %s transcribe <wav_file> <model> <tokens> [--provider <cpu|cuda>]\n", prog_name);
-  std::printf("  %s transcribe-video <video> <model> <tokens> [--provider <cpu|cuda>]\n", prog_name);
+  std::printf("  %s transcribe <wav> <model> <tokens> "
+               "[--output <file>] [--provider <cpu|cuda>]\n", prog_name);
+  std::printf("  %s transcribe-video <video> <model> <tokens> "
+               "[--output <file>] [--provider <cpu|cuda>]\n", prog_name);
     std::printf("\n");
-    std::printf("Commands:\n");
-    std::printf("  (default)          Extract audio track from a video file.\n");
-    std::printf("  transcribe         Transcribe a WAV audio file to text.\n");
-    std::printf("  transcribe-video   Extract audio from video and transcribe.\n");
+    std::printf("Options:\n");
+    std::printf("  --output <file> Output transcript to file\n");
+    std::printf("                  (default: <input>_transcript.txt)\n");
+    std::printf("  --provider cpu  Run on CPU (default).\n");
+    std::printf("  --provider cuda Run on GPU (NVIDIA CUDA).\n");
     std::printf("\n");
     std::printf("Examples:\n");
-    std::printf("  %s video.mp4                              → video.mp3\n",
-               prog_name);
-    std::printf("  %s video.mp4 audio.wav                    → audio.wav\n",
-               prog_name);
-    std::printf("  %s transcribe audio.wav model.onnx tokens.txt\n",
-               prog_name);
-    std::printf("  %s transcribe-video video.mp4 model.onnx tokens.txt\n",
-               prog_name);
+    std::printf("  %s video.mp4\n", prog_name);
+    std::printf("  %s transcribe audio.wav model.onnx tokens.txt "
+               "--provider cuda\n", prog_name);
 }
 
 /**
- * @brief 转写 WAV 文件，结果输出到 stdout。
+ * @brief 根据输入音频路径生成默认输出文本文件名。
+ *        input.wav → input_transcript.txt
+ */
+static std::string default_output_name(const char* wav_path)
+{
+  // 取 basename，替换扩展名
+  std::string name = wav_path;
+  auto slash = name.rfind('/');
+  if (slash != std::string::npos) name = name.substr(slash + 1);
+  auto dot = name.rfind('.');
+  if (dot != std::string::npos) name = name.substr(0, dot);
+  name += "_transcript.txt";
+  return name;
+}
+
+/**
+ * @brief 将文本写入文件。
+ * @param text       要写入的文本。
+ * @param output_txt 输出路径（nullptr 表示不写文件）。
+ */
+static void save_transcript(const std::string& text,
+                             const char* output_txt)
+{
+  if (!output_txt) return;
+  std::ofstream fout(output_txt);
+  if (fout) {
+    fout << text << "\n";
+    fout.close();
+    Log().print("Transcript saved to: %s", output_txt);
+  } else {
+    Log().error("Failed to write transcript: %s", output_txt);
+  }
+}
+
+/**
+ * @brief 转写 WAV 文件，结果输出到 stdout，同时存入文件。
+ * @param wav_path    WAV 音频路径。
+ * @param model_path  模型文件路径。
+ * @param tokens_path 词表文件路径。
+ * @param provider    ONNX Runtime provider ("cuda" / nullptr=cpu)。
+ * @param output_txt  输出文本路径（nullptr 则自动命名）。
  */
 static int do_transcribe(const char* wav_path,
                           const char* model_path,
                           const char* tokens_path,
-                          const char* provider = nullptr)
+                          const char* provider = nullptr,
+                          const char* output_txt = nullptr)
 {
   int exit_code = 0;
   std::string text;
@@ -91,7 +131,13 @@ static int do_transcribe(const char* wav_path,
       break;
     }
 
+    // 输出到 stdout
     std::printf("%s\n", text.c_str());
+
+    // 写入文件（自动命名或用户指定）
+    std::string out = output_txt ? output_txt
+                                : default_output_name(wav_path);
+    save_transcript(text, out.c_str());
   } while (false);
 
   // 清理临时文件
@@ -106,7 +152,8 @@ static int do_transcribe(const char* wav_path,
 static int do_transcribe_video(const char* video_path,
                                 const char* model_path,
                                 const char* tokens_path,
-                                const char* provider = nullptr)
+                                const char* provider = nullptr,
+                                const char* output_txt = nullptr)
 {
   int exit_code = 0;
   do {
@@ -118,31 +165,15 @@ static int do_transcribe_video(const char* video_path,
       wav_path += ".wav";
     }
 
-    // 步骤1: 提取音频（保持原始格式）
+    // 提取音频（默认 16kHz 单声道，与 SenseVoice 匹配）
     if (!extract_audio(video_path, wav_path)) {
       Log().error("Failed to extract audio from video.");
       exit_code = 2;
       break;
     }
 
-    // 步骤2: 转为 16kHz 单声道 PCM（SenseVoice 要求）
-    {
-      std::string tmp_wav = wav_path + ".tmp.wav";
-      if (!resample_audio(wav_path, tmp_wav)) {
-        Log().error("Failed to convert audio to 16kHz mono.");
-        exit_code = 2;
-        break;
-      }
-      // 用重采样后的文件替换原始 WAV
-      if (std::rename(tmp_wav.c_str(), wav_path.c_str()) != 0) {
-        Log().error("Failed to replace original WAV with resampled file.");
-        exit_code = 2;
-        break;
-      }
-    }
-
     exit_code = do_transcribe(wav_path.c_str(), model_path, tokens_path,
-                               provider);
+                               provider, output_txt);
   } while (false);
   return exit_code;
 }
@@ -246,15 +277,22 @@ int main(int argc, char* argv[])
     if (std::strcmp(argv[1], "transcribe") == 0) {
       if (argc < 5) {
         Log().error("Usage: %s transcribe <wav> <model> <tokens> "
-                    "[--provider <cpu|cuda>]", argv[0]);
+                    "[--output <file>] [--provider <cpu|cuda>]",
+                    argv[0]);
         exit_code = 1;
         break;
       }
-      const char* provider = nullptr;
-      if (argc >= 7 && std::strcmp(argv[5], "--provider") == 0) {
-        provider = argv[6];
+      const char* provider   = nullptr;
+      const char* output_txt = nullptr;
+      for (int i = 5; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--provider") == 0 && i + 1 < argc) {
+          provider = argv[++i];
+        } else if (std::strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
+          output_txt = argv[++i];
+        }
       }
-      exit_code = do_transcribe(argv[2], argv[3], argv[4], provider);
+      exit_code = do_transcribe(argv[2], argv[3], argv[4], provider,
+                                 output_txt);
       break;
     }
 
@@ -262,15 +300,22 @@ int main(int argc, char* argv[])
     if (std::strcmp(argv[1], "transcribe-video") == 0) {
       if (argc < 5) {
         Log().error("Usage: %s transcribe-video <video> <model> <tokens> "
-                    "[--provider <cpu|cuda>]", argv[0]);
+                    "[--output <file>] [--provider <cpu|cuda>]",
+                    argv[0]);
         exit_code = 1;
         break;
       }
-      const char* provider = nullptr;
-      if (argc >= 7 && std::strcmp(argv[5], "--provider") == 0) {
-        provider = argv[6];
+      const char* provider   = nullptr;
+      const char* output_txt = nullptr;
+      for (int i = 5; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--provider") == 0 && i + 1 < argc) {
+          provider = argv[++i];
+        } else if (std::strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
+          output_txt = argv[++i];
+        }
       }
-      exit_code = do_transcribe_video(argv[2], argv[3], argv[4], provider);
+      exit_code = do_transcribe_video(argv[2], argv[3], argv[4], provider,
+                                       output_txt);
       break;
     }
 

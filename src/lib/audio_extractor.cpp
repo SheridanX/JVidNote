@@ -102,7 +102,9 @@ bool AudioExtractor::open_input(const std::string& input_file)
 // open_output()
 // ============================================================
 
-bool AudioExtractor::open_output(const std::string& output_file)
+bool AudioExtractor::open_output(const std::string& output_file,
+                                 int target_rate,
+                                 int target_ch)
 {
   bool ret = false;
   do {
@@ -120,9 +122,9 @@ bool AudioExtractor::open_output(const std::string& output_file)
     }
     m_up_out_fmt_ctx.reset(raw);
 
-    if (!setup_output_stream()) break;
+    if (!setup_output_stream(target_rate, target_ch)) break;
     if (!write_output_header()) break;
-    if (!setup_resampler()) break;
+    if (!setup_resampler(target_rate, target_ch)) break;
 
     ret = true;
   } while (false);
@@ -230,47 +232,42 @@ bool AudioExtractor::setup_decoder()
   return ret;
 }
 
-bool AudioExtractor::setup_output_stream()
+bool AudioExtractor::setup_output_stream(int target_rate, int target_ch)
 {
   bool ret = false;
   do {
-    // 1. 创建输出流
     m_p_out_stream = avformat_new_stream(m_up_out_fmt_ctx.get(), nullptr);
     if (!m_p_out_stream) {
       Log{}.error("Cannot create output stream.");
       break;
     }
 
-    // 2. 优先尝试 stream copy（无损、快速，不经过解码→编码）
-    avcodec_parameters_copy(m_p_out_stream->codecpar,
-                            m_p_in_audio_stream->codecpar);
-    m_p_out_stream->codecpar->codec_tag = 0;
-    m_p_out_stream->time_base = m_p_in_audio_stream->time_base;
+    // 检查源和目标是否一致，一致时可以 stream copy
+    bool same_format =
+      m_up_dec_ctx->sample_rate == target_rate &&
+      m_up_dec_ctx->ch_layout.nb_channels == target_ch;
 
-    // WAV 容器只支持 PCM 编码，其他格式必须重编码
-    bool is_wav = m_up_out_fmt_ctx->oformat->name &&
-                  std::strcmp(m_up_out_fmt_ctx->oformat->name, "wav") == 0;
-    bool is_pcm = m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE
-               || m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_S16BE
-               || m_p_in_audio_stream->codecpar->codec_id == AV_CODEC_ID_PCM_U8;
+    if (same_format) {
+      avcodec_parameters_copy(m_p_out_stream->codecpar,
+                              m_p_in_audio_stream->codecpar);
+      m_p_out_stream->codecpar->codec_tag = 0;
+      m_p_out_stream->time_base = m_p_in_audio_stream->time_base;
 
-    if (avformat_query_codec(m_up_out_fmt_ctx->oformat,
-                             m_p_in_audio_stream->codecpar->codec_id,
-                             FF_COMPLIANCE_NORMAL) == 1
-        && !(is_wav && !is_pcm)) {
-      ret = true;  // stream copy 模式，无需 encoder
-      break;
+      if (avformat_query_codec(m_up_out_fmt_ctx->oformat,
+                               m_p_in_audio_stream->codecpar->codec_id,
+                               FF_COMPLIANCE_NORMAL) == 1) {
+        ret = true;
+        break;
+      }
     }
 
-    // 3. 输出容器不支持源编码，fallback 到重编码
-    Log{}.print("Output container does not support source codec, "
-              "falling back to re-encoding.");
+    // 需要重编码到目标格式
+    Log{}.print("Re-encoding to %d Hz mono...", target_rate);
 
     AVCodecID codec_id = m_up_out_fmt_ctx->oformat->audio_codec;
     const AVCodec* codec = avcodec_find_encoder(codec_id);
-
     if (!codec) {
-      Log{}.error("No suitable encoder found and stream copy not supported.");
+      Log{}.error("No suitable encoder found.");
       break;
     }
 
@@ -281,17 +278,17 @@ bool AudioExtractor::setup_output_stream()
     }
     m_up_enc_ctx.reset(raw);
 
-    m_up_enc_ctx->sample_rate = m_up_dec_ctx->sample_rate;
-    av_channel_layout_copy(&m_up_enc_ctx->ch_layout,
-                           &m_up_dec_ctx->ch_layout);
+    // 强制使用目标采样率和声道数
+    m_up_enc_ctx->sample_rate = target_rate;
+    av_channel_layout_default(&m_up_enc_ctx->ch_layout, target_ch);
     m_up_enc_ctx->sample_fmt =
       codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
 
     if (codec->supported_samplerates) {
       m_up_enc_ctx->sample_rate = codec->supported_samplerates[0];
       for (int i = 0; codec->supported_samplerates[i]; ++i) {
-        if (codec->supported_samplerates[i] == m_up_dec_ctx->sample_rate) {
-          m_up_enc_ctx->sample_rate = m_up_dec_ctx->sample_rate;
+        if (codec->supported_samplerates[i] == target_rate) {
+          m_up_enc_ctx->sample_rate = target_rate;
           break;
         }
       }
@@ -309,7 +306,6 @@ bool AudioExtractor::setup_output_stream()
       break;
     }
 
-    // 用编码器参数覆盖输出流
     avcodec_parameters_from_context(m_p_out_stream->codecpar,
                                     m_up_enc_ctx.get());
     m_p_out_stream->time_base = m_up_enc_ctx->time_base;
@@ -319,30 +315,36 @@ bool AudioExtractor::setup_output_stream()
   return ret;
 }
 
-bool AudioExtractor::setup_resampler()
+bool AudioExtractor::setup_resampler(int target_rate, int target_ch)
 {
   bool ret = false;
   do {
+    // stream copy 模式无需重采样
     if (!m_up_enc_ctx) { ret = true; break; }
+
+    // 设置重采样：从源格式 → 目标格式
+    AVChannelLayout target_layout;
+    av_channel_layout_default(&target_layout, target_ch);
 
     SwrContext* raw = nullptr;
     int rc = swr_alloc_set_opts2(
       &raw,
-      &m_up_enc_ctx->ch_layout, m_up_enc_ctx->sample_fmt,
+      &target_layout, m_up_enc_ctx->sample_fmt,
       m_up_enc_ctx->sample_rate,
       &m_up_dec_ctx->ch_layout, m_up_dec_ctx->sample_fmt,
       m_up_dec_ctx->sample_rate, 0, nullptr);
     if (rc < 0 || swr_init(raw) < 0) {
       Log{}.error("Cannot initialize resampler.");
+      av_channel_layout_uninit(&target_layout);
       break;
     }
     m_up_swr_ctx.reset(raw);
+    av_channel_layout_uninit(&target_layout);
     ret = true;
 
-    // 4. 创建音频 FIFO 用于缓冲重采样后的数据
     int frame_size = m_up_enc_ctx->frame_size;
     if (frame_size <= 0) {
-      frame_size = 1024;  // 如果编码器没指定，使用默认值
+      frame_size = 1024;
     }
     m_up_audio_fifo.reset(
       av_audio_fifo_alloc(m_up_enc_ctx->sample_fmt,

@@ -43,7 +43,7 @@ struct SpeechRecognizer::Impl
   using OfflineRec = sherpa_onnx::cxx::OfflineRecognizer;
 
   std::unique_ptr<OfflineRec> up_recognizer;
-  int32_t chunk_duration_sec = 30;
+  int32_t chunk_duration_sec = 60;
 };
 
 // ============================================================

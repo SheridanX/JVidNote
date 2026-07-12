@@ -4,9 +4,10 @@ JVidNote 依赖下载脚本 (跨平台)
 自动下载 sherpa-onnx 动态库、onnxruntime、SenseVoice 语音模型
 
 用法:
-    python scripts/setup.py          # 下载 CPU 版
-    python scripts/setup.py --gpu    # 下载 GPU (CUDA) 版
-    python scripts/setup.py --clean  # 仅复制本地 third_party_lib 缓存
+    python scripts/setup.py          # 下载 CPU 版 + INT8 模型
+    python scripts/setup.py --gpu    # 下载 GPU 版 + INT8 模型
+    python scripts/setup.py --fp16   # 下载 GPU 版 + FP16 模型
+    python scripts/setup.py --gpu --fp16  # GPU + FP16
 """
 
 import os
@@ -19,10 +20,15 @@ from pathlib import Path
 
 # ---- 配置 ----
 SHERPA_VER = "v1.13.3"
-MODEL_NAME = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
-MODEL_URL = (
+MODEL_NAME_INT8 = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
+MODEL_NAME_FP16 = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
+MODEL_URL_INT8 = (
     f"https://github.com/k2-fsa/sherpa-onnx/releases/download/"
-    f"asr-models/{MODEL_NAME}.tar.bz2"
+    f"asr-models/{MODEL_NAME_INT8}.tar.bz2"
+)
+MODEL_URL_FP16 = (
+    f"https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+    f"asr-models/{MODEL_NAME_FP16}.tar.bz2"
 )
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -130,16 +136,17 @@ def download_sherpa(pkg_name: str, lib_dir: Path, include_dir: Path,
     copy_headers(extracted, include_dir)
 
 
-def download_model(model_dir: Path, cache_dir: Path) -> Path:
-    """下载 SenseVoice 模型"""
-    target = model_dir / MODEL_NAME
+def download_model(model_dir: Path, cache_dir: Path,
+                    model_name: str, model_url: str) -> Path:
+    """下载语音识别模型"""
+    target = model_dir / model_name
     if target.exists():
         print(f"  模型已存在: {target}")
         return target
 
-    archive = cache_dir / f"{MODEL_NAME}.tar.bz2"
+    archive = cache_dir / f"{model_name}.tar.bz2"
     if not archive.exists():
-        download(MODEL_URL, archive)
+        download(model_url, archive)
     else:
         print(f"  使用本地缓存: {archive}")
 
@@ -147,7 +154,8 @@ def download_model(model_dir: Path, cache_dir: Path) -> Path:
     return extract_tar_bz2(archive, model_dir)
 
 
-def verify(lib_dir: Path, model_path: Path, is_gpu: bool) -> bool:
+def verify(lib_dir: Path, model_path: Path, is_gpu: bool,
+            model_name: str) -> bool:
     """验证关键文件"""
     print()
     print("=" * 60)
@@ -174,13 +182,16 @@ def verify(lib_dir: Path, model_path: Path, is_gpu: bool) -> bool:
             print(f"  ❌ {name} 缺失!")
             ok = False
 
-    for name in ["model.int8.onnx", "tokens.txt"]:
+    # FP16 模型文件是 model.onnx，INT8 是 model.int8.onnx
+    is_fp16 = "int8" not in model_name
+    onnx_file = "model.onnx" if is_fp16 else "model.int8.onnx"
+    for name in [onnx_file, "tokens.txt"]:
         p = model_path / name
         if p.exists():
             size_mb = p.stat().st_size / 1024 / 1024
-            print(f"  ✅ model/{MODEL_NAME}/{name} ({size_mb:.1f} MB)")
+            print(f"  ✅ model/{model_name}/{name} ({size_mb:.1f} MB)")
         else:
-            print(f"  ❌ model/{MODEL_NAME}/{name} 缺失!")
+            print(f"  ❌ model/{model_name}/{name} 缺失!")
             ok = False
 
     return ok
@@ -188,7 +199,12 @@ def verify(lib_dir: Path, model_path: Path, is_gpu: bool) -> bool:
 
 def main():
     use_gpu = "--gpu" in sys.argv
-    mode = "GPU (CUDA)" if use_gpu else "CPU"
+    use_fp16 = "--fp16" in sys.argv
+    mode = []
+    if use_gpu: mode.append("GPU (CUDA)")
+    else: mode.append("CPU")
+    mode.append("FP16" if use_fp16 else "INT8")
+    mode_str = " + ".join(mode)
 
     root = get_project_root()
     lib_dir = root / "lib"
@@ -198,7 +214,7 @@ def main():
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print(f"JVidNote 依赖下载 ({mode})")
+    print(f"JVidNote 依赖下载 ({mode_str})")
     print(f"平台: {platform.system()} ({platform.machine()})")
     print(f"项目: {root}")
     print("=" * 60)
@@ -209,13 +225,16 @@ def main():
     pkg = SHERPA_GPU_PKG if use_gpu else SHERPA_CPU_PKG
     download_sherpa(pkg, lib_dir, include_dir, cache_dir)
 
-    # 2. SenseVoice 模型
+    # 2. 语音识别模型
     print()
-    print("[2/2] SenseVoice 语音识别模型")
-    model_path = download_model(model_dir, cache_dir)
+    model_name = MODEL_NAME_FP16 if use_fp16 else MODEL_NAME_INT8
+    model_url = MODEL_URL_FP16 if use_fp16 else MODEL_URL_INT8
+    model_label = "SenseVoice (FP16)" if use_fp16 else "SenseVoice (INT8)"
+    print(f"[2/2] {model_label} 语音识别模型")
+    model_path = download_model(model_dir, cache_dir, model_name, model_url)
 
     # 验证
-    if verify(lib_dir, model_path, use_gpu):
+    if verify(lib_dir, model_path, use_gpu, model_name):
         print()
         print("=" * 60)
         print("依赖下载完成!")
@@ -225,10 +244,11 @@ def main():
         print()
         print("运行:")
         provider = "--provider cuda" if use_gpu else ""
-        model_arg = f"model/{MODEL_NAME}"
+        fp16_flag = "--fp16" if use_fp16 else ""
+        model_arg = f"model/{model_name}"
         print(f"  ./build/src/jvidnote_cli transcribe <audio.wav> \\")
-        print(f"       {model_arg}/model.int8.onnx \\")
-        print(f"       {model_arg}/tokens.txt {provider}")
+        print(f"       {model_arg}/{'model.onnx' if use_fp16 else 'model.int8.onnx'} \\")
+        print(f"       {model_arg}/tokens.txt {provider} {fp16_flag}")
         print("=" * 60)
     else:
         print()
