@@ -147,7 +147,7 @@ def download_model(model_dir: Path, cache_dir: Path) -> Path:
     return extract_tar_bz2(archive, model_dir)
 
 
-def verify(lib_dir: Path, model_path: Path) -> bool:
+def verify(lib_dir: Path, model_path: Path, is_gpu: bool) -> bool:
     """验证关键文件"""
     print()
     print("=" * 60)
@@ -157,11 +157,14 @@ def verify(lib_dir: Path, model_path: Path) -> bool:
     ok = True
     required_libs = [
         f"libonnxruntime{LIB_EXT}",
-        f"libonnxruntime_providers_cuda{LIB_EXT}",
-        f"libonnxruntime_providers_shared{LIB_EXT}",
         f"libsherpa-onnx-c-api{LIB_EXT}",
         f"libsherpa-onnx-cxx-api{LIB_EXT}",
     ]
+    if is_gpu:
+        required_libs += [
+            f"libonnxruntime_providers_cuda{LIB_EXT}",
+            f"libonnxruntime_providers_shared{LIB_EXT}",
+        ]
     for name in required_libs:
         p = lib_dir / name
         if p.exists():
@@ -212,7 +215,7 @@ def main():
     model_path = download_model(model_dir, cache_dir)
 
     # 验证
-    if verify(lib_dir, model_path):
+    if verify(lib_dir, model_path, use_gpu):
         print()
         print("=" * 60)
         print("依赖下载完成!")
