@@ -78,6 +78,7 @@ bool SpeechRecognizer::init(const SpeechRecognizerConfig& cfg)
     sherpa_onnx::cxx::OfflineRecognizerConfig sherpa_cfg;
     sherpa_cfg.model_config.num_threads = cfg.num_threads;
     sherpa_cfg.model_config.tokens = cfg.tokens_path;
+    sherpa_cfg.model_config.provider = cfg.provider;
 
     if (cfg.model_type == "sense_voice") {
       sherpa_cfg.model_config.sense_voice.model = cfg.model_path;

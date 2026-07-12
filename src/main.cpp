@@ -17,8 +17,8 @@ static void print_usage(const char* prog_name)
 {
     std::printf("Usage:\n");
     std::printf("  %s <input.mp4> [output_audio.ext]\n", prog_name);
-    std::printf("  %s transcribe <wav_file> <model> <tokens>\n", prog_name);
-    std::printf("  %s transcribe-video <video> <model> <tokens>\n", prog_name);
+  std::printf("  %s transcribe <wav_file> <model> <tokens> [--provider <cpu|cuda>]\n", prog_name);
+  std::printf("  %s transcribe-video <video> <model> <tokens> [--provider <cpu|cuda>]\n", prog_name);
     std::printf("\n");
     std::printf("Commands:\n");
     std::printf("  (default)          Extract audio track from a video file.\n");
@@ -41,15 +41,34 @@ static void print_usage(const char* prog_name)
  */
 static int do_transcribe(const char* wav_path,
                           const char* model_path,
-                          const char* tokens_path)
+                          const char* tokens_path,
+                          const char* provider = nullptr)
 {
   int exit_code = 0;
   std::string text;
+  std::string actual_wav = wav_path;
+  std::string tmp_wav;
   do {
+    // 检查是否需要转为 16kHz 单声道（SenseVoice 要求）
+    {
+      AudioResampler resampler;
+      if (resampler.needs_resample(wav_path, 16000, 1)) {
+        Log().print("Audio needs resampling to 16kHz mono, converting...");
+        tmp_wav = std::string(wav_path) + ".jv_16k.wav";
+        if (!resample_audio(wav_path, tmp_wav)) {
+          Log().error("Failed to resample audio to 16kHz mono.");
+          exit_code = 2;
+          break;
+        }
+        actual_wav = tmp_wav;
+      }
+    }
+
     SpeechRecognizer sr;
     SpeechRecognizerConfig cfg;
     cfg.model_path = model_path;
     cfg.tokens_path = tokens_path;
+    if (provider) cfg.provider = provider;
 
     if (!sr.init(cfg)) {
       Log().error("Failed to initialize speech recognizer.");
@@ -58,7 +77,7 @@ static int do_transcribe(const char* wav_path,
     }
 
     text = sr.transcribe_file(
-      wav_path,
+      actual_wav,
       [](int chunk_idx, int total, const std::string& chunk_text) {
         if (total > 1) {
           std::fprintf(stderr, "\r[chunk %d/%d] %s\n",
@@ -74,6 +93,10 @@ static int do_transcribe(const char* wav_path,
 
     std::printf("%s\n", text.c_str());
   } while (false);
+
+  // 清理临时文件
+  if (!tmp_wav.empty()) std::remove(tmp_wav.c_str());
+
   return exit_code;
 }
 
@@ -82,7 +105,8 @@ static int do_transcribe(const char* wav_path,
  */
 static int do_transcribe_video(const char* video_path,
                                 const char* model_path,
-                                const char* tokens_path)
+                                const char* tokens_path,
+                                const char* provider = nullptr)
 {
   int exit_code = 0;
   do {
@@ -117,7 +141,8 @@ static int do_transcribe_video(const char* video_path,
       }
     }
 
-    exit_code = do_transcribe(wav_path.c_str(), model_path, tokens_path);
+    exit_code = do_transcribe(wav_path.c_str(), model_path, tokens_path,
+                               provider);
   } while (false);
   return exit_code;
 }
@@ -220,23 +245,32 @@ int main(int argc, char* argv[])
     // ---- transcribe 子命令 ----
     if (std::strcmp(argv[1], "transcribe") == 0) {
       if (argc < 5) {
-        Log().error("Usage: %s transcribe <wav> <model> <tokens>", argv[0]);
+        Log().error("Usage: %s transcribe <wav> <model> <tokens> "
+                    "[--provider <cpu|cuda>]", argv[0]);
         exit_code = 1;
         break;
       }
-      exit_code = do_transcribe(argv[2], argv[3], argv[4]);
+      const char* provider = nullptr;
+      if (argc >= 7 && std::strcmp(argv[5], "--provider") == 0) {
+        provider = argv[6];
+      }
+      exit_code = do_transcribe(argv[2], argv[3], argv[4], provider);
       break;
     }
 
     // ---- transcribe-video 子命令 ----
     if (std::strcmp(argv[1], "transcribe-video") == 0) {
       if (argc < 5) {
-        Log().error("Usage: %s transcribe-video <video> <model> <tokens>",
-                    argv[0]);
+        Log().error("Usage: %s transcribe-video <video> <model> <tokens> "
+                    "[--provider <cpu|cuda>]", argv[0]);
         exit_code = 1;
         break;
       }
-      exit_code = do_transcribe_video(argv[2], argv[3], argv[4]);
+      const char* provider = nullptr;
+      if (argc >= 7 && std::strcmp(argv[5], "--provider") == 0) {
+        provider = argv[6];
+      }
+      exit_code = do_transcribe_video(argv[2], argv[3], argv[4], provider);
       break;
     }
 

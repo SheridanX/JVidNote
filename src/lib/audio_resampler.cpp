@@ -81,6 +81,44 @@ bool AudioResampler::resample(const std::string& input_file,
 }
 
 // ============================================================
+// needs_resample()
+// ============================================================
+
+bool AudioResampler::needs_resample(const std::string& input_file,
+                                     int target_rate,
+                                     int target_ch)
+{
+  bool needs = true;
+  do {
+    AVFormatContext* raw = nullptr;
+    if (avformat_open_input(&raw, input_file.c_str(), nullptr, nullptr) < 0) {
+      break;
+    }
+
+    if (avformat_find_stream_info(raw, nullptr) < 0) {
+      avformat_close_input(&raw);
+      break;
+    }
+
+    int idx = av_find_best_stream(raw, AVMEDIA_TYPE_AUDIO,
+                                  -1, -1, nullptr, 0);
+    if (idx < 0) {
+      avformat_close_input(&raw);
+      break;
+    }
+
+    AVCodecParameters* par = raw->streams[idx]->codecpar;
+    if (par->sample_rate == target_rate &&
+        par->ch_layout.nb_channels == target_ch) {
+      needs = false;
+    }
+
+    avformat_close_input(&raw);
+  } while (false);
+  return needs;
+}
+
+// ============================================================
 // open_input()
 // ============================================================
 

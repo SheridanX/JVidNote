@@ -10,8 +10,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# 匹配 sherpa-onnx 预编译库的 C++ ABI（旧版，无 __cxx11）
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+# GPU 版 sherpa-onnx 使用新 C++11 ABI（__cxx11），与 GCC 5+ 默认一致
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 # Debug: 嵌入源码路径 RPATH，方便直接运行调试
 # Release: 不嵌入任何 RPATH，由打包/部署脚本自行处理 .so 路径

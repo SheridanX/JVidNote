@@ -88,6 +88,17 @@ public:
                 int target_ch = 1);
 
   /**
+   * @brief 检查音频文件是否需要重采样。
+   * @param input_file  输入音频文件路径。
+   * @param target_rate 目标采样率。
+   * @param target_ch   目标声道数。
+   * @return 需要重采样返回 true。
+   */
+  bool needs_resample(const std::string& input_file,
+                      int target_rate = 16000,
+                      int target_ch = 1);
+
+  /**
    * @brief 关闭所有资源，允许复用。
    */
   void close();

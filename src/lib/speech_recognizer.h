@@ -35,6 +35,8 @@ struct SpeechRecognizerConfig
   bool use_itn = true;
   /** 模型类型，"sense_voice" 或 "whisper" 等。 */
   std::string model_type = "sense_voice";
+  /** ONNX Runtime 执行后端，"cpu" / "cuda" / "coreml" 等。 */
+  std::string provider = "cpu";
   /**
    * @brief 分段时长（秒）。音频超过此长度时自动分片转写，避免 OOM。
    *        设为 0 表示不分片，一次性处理。
