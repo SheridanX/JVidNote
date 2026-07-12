@@ -1,11 +1,11 @@
-#include "speech_recognizer.h"
+#include "speech_recognizer.hpp"
 
 #include <cstdio>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
 
-#include "log.h"
+#include "log.hpp"
 #include "sherpa-onnx/c-api/cxx-api.h"
 
 namespace

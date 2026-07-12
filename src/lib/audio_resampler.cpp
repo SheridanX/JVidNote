@@ -6,8 +6,8 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
-#include "audio_resampler.h"
-#include "log.h"
+#include "audio_resampler.hpp"
+#include "log.hpp"
 
 #include <cstring>
 

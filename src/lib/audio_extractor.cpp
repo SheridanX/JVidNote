@@ -7,8 +7,8 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
-#include "audio_extractor.h"
-#include "log.h"
+#include "audio_extractor.hpp"
+#include "log.hpp"
 
 #include <algorithm>
 #include <cstring>

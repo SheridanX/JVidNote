@@ -1,7 +1,7 @@
-#include "lib/audio_extractor.h"
-#include "lib/audio_resampler.h"
-#include "lib/log.h"
-#include "lib/speech_recognizer.h"
+#include "lib/audio_extractor.hpp"
+#include "lib/audio_resampler.hpp"
+#include "lib/log.hpp"
+#include "lib/speech_recognizer.hpp"
 
 #include <atomic>
 #include <chrono>
